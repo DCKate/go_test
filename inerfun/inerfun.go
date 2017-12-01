@@ -9,37 +9,14 @@ import (
     "io/ioutil"
 )
 
-func MakeJsonPost(url string,token string,urlbody []byte)(string,[]byte){
-
-    var jsonStr = []byte(urlbody)
-    req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonStr))
-    req.Header.Set("authorization", token)
-    req.Header.Set("Accept", "application/json")
-    req.Header.Set("Content-Type", "application/json")
-    tr := &http.Transport{
-        TLSClientConfig: &tls.Config{InsecureSkipVerify: false},
-    }
-    // fmt.Printf("Request : %v \n", req)
-    client := &http.Client{Transport:tr}
-    resp, err := client.Do(req)
-    if err != nil {
-        fmt.Println("error:", err)
-        // panic(err)
-    }
-    defer resp.Body.Close()
-
-    // fmt.Println("response Status:", resp.Status)
-    // fmt.Println("response Headers:", resp.Header)
-    body, _ := ioutil.ReadAll(resp.Body)
-
-    return resp.Status,body
-}
-
-func MakePost(url string,headers map[string]string,urlbody []byte)(string,[]byte){
+func MakePost(url string,headers map[string]string,urlbody []byte)(int,[]byte){
 
     var jsonStr = []byte(urlbody)
     req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonStr))
     for kk,vv:=range headers {
+        // req.Header.Set("authorization", token)
+        // req.Header.Set("Accept", "application/json")
+        // req.Header.Set("Content-Type", "application/json")
         req.Header.Set(kk, vv)
     }
 
@@ -59,10 +36,10 @@ func MakePost(url string,headers map[string]string,urlbody []byte)(string,[]byte
     // fmt.Println("response Headers:", resp.Header)
     body, _ := ioutil.ReadAll(resp.Body)
 
-    return resp.Status,body
+    return resp.StatusCode,body
 }
 
-func MakeGet(urlpath string,headers map[string]string,para map[string]string)(string,[]byte){
+func MakeGet(urlpath string,headers map[string]string,para map[string]string)(int,[]byte){
     
     req, err := http.NewRequest("GET", urlpath, nil)
     for kk,vv:=range headers {
@@ -90,10 +67,10 @@ func MakeGet(urlpath string,headers map[string]string,para map[string]string)(st
 
     body, _ := ioutil.ReadAll(resp.Body)
 
-    return resp.Status,body
+    return resp.StatusCode,body
 }
 
-func MakeSimpleGetToByte(urlpath string)(string,[]byte) {
+func MakeSimpleGetToByte(urlpath string)(int,[]byte) {
     resp, err := http.Get(urlpath)
     if err != nil {
         // handle error
@@ -106,10 +83,10 @@ func MakeSimpleGetToByte(urlpath string)(string,[]byte) {
         // panic(err)
     }
     // fmt.Println(string(body))
-  return resp.Status,body
+  return resp.StatusCode,body
 }
 
-func MakeSimpleGetToStr(urlpath string)(string,string) {
+func MakeSimpleGetToStr(urlpath string)(int,string) {
     resp, err := http.Get(urlpath)
     if err != nil {
         // handle error
@@ -119,7 +96,7 @@ func MakeSimpleGetToStr(urlpath string)(string,string) {
     buf := new(bytes.Buffer)
     buf.ReadFrom(resp.Body)
     s := buf.String() // Does a complete copy of the bytes in the buffer.
-    return resp.Status,s
+    return resp.StatusCode,s
 }
 
 func httpPostForm(urlpath string) {

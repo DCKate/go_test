@@ -170,6 +170,17 @@ func FilterStrings(ss []string, filterfun func(string) bool) (ret []string) {
     return
 }
 
+func GetValueByKey(b []byte,key string) interface{}{
+    m:=make(map[string]interface{})
+    json.Unmarshal(b,&m)
+    for k,v :=range m {
+        if k==key {
+            return v
+        }
+    }
+    return nil
+}
+
 /*************************************** test function ************************************/
 func TestJson() {
     dinfo:=DevInfo{
