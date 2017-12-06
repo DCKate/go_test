@@ -230,7 +230,8 @@ func TestJson() {
 		DeviceInfo: dinfo,
 	}
 
-	jraw, err := json.Marshal(adev)
+	// jraw, err := json.Marshal(adev)
+	jraw, err := json.MarshalIndent(adev, "", "\t") //beautiful json
 	if err != nil {
 		fmt.Println("error:", err)
 	}
