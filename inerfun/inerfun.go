@@ -51,7 +51,7 @@ func MakeGet(urlpath string,headers map[string]string,para map[string]string)(in
         q.Set(pk,pv)    
     }
     req.URL.RawQuery = q.Encode()
-    fmt.Println(req.URL.String())
+    // fmt.Println(req.URL.String())
 
     tr := &http.Transport{
         TLSClientConfig: &tls.Config{InsecureSkipVerify: false},
