@@ -98,14 +98,15 @@ func GenFileSimpleWithByte(filename string, bb []byte) {
 	check(err)
 }
 
-func GenFileByte(filename string, bb []byte) {
+func GenFileByte(filename string, bb []byte) int {
 	f, err := os.Create(filename)
 	check(err)
 	defer f.Close() //It’s idiomatic to defer a Close immediately after opening a file.
-	_, err = f.Write(bb)
+	n, err := f.Write(bb)
 	check(err)
 	// fmt.Printf("wrote %d bytes\n", n)
 	f.Sync()
+	return n
 }
 
 func GenFileString(filename string, s string) {
