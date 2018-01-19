@@ -8,6 +8,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/url"
+	"strconv"
 )
 
 func MakePost(url string, headers map[string]string, urlbody []byte) (int, []byte) {
@@ -43,15 +44,21 @@ func MakePost(url string, headers map[string]string, urlbody []byte) (int, []byt
 
 func MakePutFile(url string, headers map[string]string, data io.Reader) (int, []byte) {
 
+	cl, _ := strconv.ParseInt(headers["Content-Length"], 10, 64)
 	req, err := http.NewRequest(http.MethodPut, url, data)
+	req.ContentLength = cl
 	for kk, vv := range headers {
-		req.Header.Set(kk, vv)
+		if kk != "Content-Length" {
+			req.Header.Add(kk, vv)
+		}
 	}
-
+	// fmt.Println(req.Header["Content-Length"])
 	tr := &http.Transport{
 		TLSClientConfig: &tls.Config{InsecureSkipVerify: false},
 	}
-	fmt.Printf("Request : %v \n", req)
+	// dump, _ := httputil.DumpRequest(req, true)
+	// fmt.Println(string(dump))
+	// fmt.Printf("Request : %v \n", req)
 	client := &http.Client{Transport: tr}
 	resp, err := client.Do(req)
 	if err != nil {
