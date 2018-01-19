@@ -1,9 +1,10 @@
-package interfun
+package inerfun
 
 import (
 	"bytes"
 	"crypto/tls"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net/http"
 	"net/url"
@@ -40,6 +41,33 @@ func MakePost(url string, headers map[string]string, urlbody []byte) (int, []byt
 	return resp.StatusCode, body
 }
 
+func MakePutFile(url string, headers map[string]string, data io.Reader) (int, []byte) {
+
+	req, err := http.NewRequest(http.MethodPut, url, data)
+	for kk, vv := range headers {
+		req.Header.Set(kk, vv)
+	}
+
+	tr := &http.Transport{
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: false},
+	}
+	fmt.Printf("Request : %v \n", req)
+	client := &http.Client{Transport: tr}
+	resp, err := client.Do(req)
+	if err != nil {
+		fmt.Println("error:", err)
+		return -1, nil
+		// panic(err)
+	}
+	defer resp.Body.Close()
+
+	// fmt.Println("response Status:", resp.Status)
+	// fmt.Println("response Headers:", resp.Header)
+	body, _ := ioutil.ReadAll(resp.Body)
+	fmt.Printf("Response : %v \n", string(body))
+	return resp.StatusCode, body
+}
+
 func MakeGet(urlpath string, headers map[string]string, para map[string]string) (int, []byte) {
 
 	req, err := http.NewRequest("GET", urlpath, nil)
@@ -52,7 +80,7 @@ func MakeGet(urlpath string, headers map[string]string, para map[string]string) 
 		q.Set(pk, pv)
 	}
 	req.URL.RawQuery = q.Encode()
-	// fmt.Println(req.URL.String())
+	fmt.Println(req.URL.String())
 
 	tr := &http.Transport{
 		TLSClientConfig: &tls.Config{InsecureSkipVerify: false},
@@ -67,7 +95,7 @@ func MakeGet(urlpath string, headers map[string]string, para map[string]string) 
 	}
 	defer resp.Body.Close()
 	body, _ := ioutil.ReadAll(resp.Body)
-
+	// fmt.Printf("Response : %v \n", string(body))
 	return resp.StatusCode, body
 }
 

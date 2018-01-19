@@ -7,8 +7,11 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
+	"inerfun"
 	"log"
 	"net/url"
+	"os"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -22,6 +25,7 @@ const AWSREQUEST = "aws4_request"
 AWS4HMACSHA256 AWS sign  algorithm
 */
 const AWS4HMACSHA256 = "AWS4-HMAC-SHA256"
+const SHA256HEADER = "x-amz-content-sha256"
 
 /*
 AWSAuthRequ for aws authorization use
@@ -31,10 +35,13 @@ type AWSAuthRequ struct {
 	CanURIBody  string
 	CanQueryStr string
 	SignHeader  map[string]string
-	Payload     string
-	Region      string
-	Service     string
-	Createtime  time.Time
+	// SignHeaderStrCurl   string
+	SignHeaderStr       string
+	CanonicalHeadersStr string
+	Payload             string
+	Region              string
+	Service             string
+	Createtime          time.Time
 }
 
 /*
@@ -50,8 +57,40 @@ func (req *AWSAuthRequ) CreatAWSAuthRequ(
 	req.Payload = Payload
 	req.Region = Region
 	req.Service = Service
-	req.Createtime = time.Now()
+	layout := "20060102T150405Z"
+	str := "20180119T110113Z"
+	t, err := time.Parse(layout, str)
+	if err != nil {
+		fmt.Println(err)
+	}
+	req.Createtime = t
+	// fmt.Printf("x-amz-date:%v\n", req.Createtime.Format("20060102T150405Z"))
+	// req.Createtime = time.Now().UTC()
+	// req.SignHeader["x-amz-date"] = req.Createtime.Format("20060102T150405Z")
 
+}
+
+/*
+The x-amz-content-sha256 header is required for all AWS Signature Version 4 requests.
+It provides a hash of the request payload.
+If there is no payload, you must provide the hash of an empty string.
+*/
+func (req *AWSAuthRequ) getCanonicalHeaders() {
+	rhdr := ""
+	shdr := ""
+	// hhdr := ""
+	for kk, vv := range req.SignHeader {
+		rhdr += strings.ToLower(kk) + ":" + strings.TrimSpace(vv) + "\n"
+		shdr += ";" + strings.ToLower(kk)
+		// hhdr += ";" + kk
+	}
+	req.CanonicalHeadersStr = rhdr
+	req.SignHeaderStr = strings.TrimPrefix(shdr, ";")
+	// req.SignHeaderStrCurl = strings.TrimPrefix(hhdr, ";") + ";Authorization"
+}
+
+func (req *AWSAuthRequ) setSighHeaders(key string, vv string) {
+	req.SignHeader[key] = vv
 }
 
 func getCanonicalURI(canURL string) string {
@@ -62,31 +101,12 @@ func getCanonicalURI(canURL string) string {
 }
 func getCanonicalQueryString(canQueryStr string) string {
 	if len(canQueryStr) != 0 {
-		return url.QueryEscape(canQueryStr)
+		str := url.QueryEscape(canQueryStr)
+		return str
 	}
 	return ""
 }
 
-/*
-The x-amz-content-sha256 header is required for all AWS Signature Version 4 requests.
-It provides a hash of the request payload.
-If there is no payload, you must provide the hash of an empty string.
-*/
-func getCanonicalHeaders(signHeader map[string]string) string {
-	rhdr := ""
-	for kk, vv := range signHeader {
-		rhdr += strings.ToLower(kk) + ":" + strings.TrimSpace(vv) + "\n"
-	}
-	return rhdr
-}
-func getSignedHeaders(signHeader map[string]string) string {
-	shdr := ""
-	for kk := range signHeader {
-		shdr += ";" + strings.ToLower(kk)
-	}
-
-	return strings.TrimPrefix(shdr, ";")
-}
 func getHexEncodeSHA256(payload string) string {
 	h := sha256.New()
 	h.Write([]byte(payload))
@@ -103,23 +123,20 @@ CanonicalRequest =
   SignedHeaders + '\n' +
   HexEncode(Hash(RequestPayload))
 */
-func CanonicalRequest(requ AWSAuthRequ) string {
-	const SHA256HEADER = "x-amz-content-sha256"
+func CanonicalRequest(requ *AWSAuthRequ) string {
 	rcanURI := getCanonicalURI(requ.CanURIBody)
 	enqrystr := getCanonicalQueryString(requ.CanQueryStr)
 	hashpyd := getHexEncodeSHA256(requ.Payload)
-	requ.SignHeader[SHA256HEADER] = hashpyd
-	rcanhdr := getCanonicalHeaders(requ.SignHeader)
-	shdr := getSignedHeaders(requ.SignHeader)
-
+	requ.setSighHeaders(SHA256HEADER, hashpyd)
+	requ.setSighHeaders("x-amz-date", requ.Createtime.Format("20060102T150405Z"))
+	requ.getCanonicalHeaders()
 	canReq := requ.HTTPMethod + "\n" +
 		rcanURI + "\n" +
 		enqrystr + "\n" +
-		rcanhdr + "\n" +
-		shdr + "\n" +
+		requ.CanonicalHeadersStr + "\n" +
+		requ.SignHeaderStr + "\n" +
 		hashpyd
-	log.Println(canReq)
-
+	fmt.Printf("Canonrequest :\n%v\n", canReq)
 	return canReq
 }
 
@@ -135,15 +152,13 @@ StringToSign =
     CredentialScope + \n +
     HashedCanonicalRequest
 */
-func StringToSign(requ AWSAuthRequ) string {
-	// t := time.Now()
-	// fmt.Println(t.Format("20060102T150405Z"))
-
+func StringToSign(requ *AWSAuthRequ) string {
 	credScope := getScope(requ.Createtime, requ.Region, requ.Service)
-	hashRequ := CanonicalRequest(requ)
+	hashRequ := getHexEncodeSHA256(CanonicalRequest(requ))
 	signstr := AWS4HMACSHA256 + "\n" +
 		requ.Createtime.Format("20060102T150405Z") + "\n" +
 		credScope + "\n" + hashRequ
+	fmt.Printf("StringToSign :\n%v\n", signstr)
 	return signstr
 
 }
@@ -162,7 +177,7 @@ kRegion = HMAC(kDate, Region)
 kService = HMAC(kRegion, Service)
 kSigning = HMAC(kService, "aws4_request")
 */
-func CalculateSignature(secretkey string, requ AWSAuthRequ) string {
+func CalculateSignature(secretkey string, requ *AWSAuthRequ) string {
 	const AWS4 = "AWS4"
 	secret := []byte(AWS4 + secretkey)
 	date := getHMACSHA256(secret, requ.Createtime.Format("20060102"))
@@ -177,12 +192,52 @@ func CalculateSignature(secretkey string, requ AWSAuthRequ) string {
 GetAuthorizationHeader the authorization header
 Authorization: algorithm Credential=access key ID/credential scope, SignedHeaders=SignedHeaders, Signature=signature
 */
-func GetAuthorizationHeader(accesskey, secretkey string, requ AWSAuthRequ) string {
-	headers := getSignedHeaders(requ.SignHeader)
+func GetAuthorizationHeader(accesskey, secretkey string, requ *AWSAuthRequ) string {
 	credentialScope := getScope(requ.Createtime, requ.Region, requ.Service)
 	signature := CalculateSignature(secretkey, requ)
-	authstr := fmt.Sprintf("%v Credential=%v/%v, SignedHeaders=%v, Signature=%v", AWS4HMACSHA256, accesskey, credentialScope, headers, signature)
+	authstr := fmt.Sprintf("%v Credential=%v/%v, SignedHeaders=%v, Signature=%v", AWS4HMACSHA256, accesskey, credentialScope, requ.SignHeaderStr, signature)
+	fmt.Println(authstr)
 	return authstr
+}
+
+/*
+
+	HTTPMethod  string
+	CanURIBody  string
+	CanQueryStr string
+	SignHeader  map[string]string
+	Payload     string
+	Region      string
+	Service     string
+*/
+func GetS3Object(accesskey, secretkey, urlpath, Region, filename string, header map[string]string) (int, []byte) {
+	var req = &AWSAuthRequ{}
+	req.CreatAWSAuthRequ("GET", filename, "", "", Region, "s3", header)
+	auth := GetAuthorizationHeader(accesskey, secretkey, req)
+	header["Authorization"] = auth
+	var para map[string]string
+	return inerfun.MakeGet(urlpath+filename, header, para)
+}
+
+func PutS3Object(accesskey, secretkey, urlpath, Region, s3keyname, localfilename string, header map[string]string) (int, []byte) {
+	file, err := os.Open(localfilename)
+	if err != nil {
+		log.Fatal(err)
+	}
+	fi, err := file.Stat()
+	if err != nil {
+		log.Fatal(err)
+	}
+	ll := strconv.FormatInt(fi.Size(), 10)
+	var req = &AWSAuthRequ{}
+	req.CreatAWSAuthRequ("PUT", s3keyname, "", "UNSIGNED-PAYLOAD", Region, "s3", header)
+	// req.setSighHeaders("x-amz-acl", "public-read")
+	req.setSighHeaders("Content-Length", ll)
+	auth := GetAuthorizationHeader(accesskey, secretkey, req)
+	header[SHA256HEADER] = req.SignHeader[SHA256HEADER]
+	// header["Content-Length"] = ll
+	header["Authorization"] = auth
+	return inerfun.MakePutFile(urlpath+s3keyname, header, file)
 }
 
 func getHMACSHA1(key []byte, message string) []byte {
