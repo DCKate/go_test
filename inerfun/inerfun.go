@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 )
 
 func MakePost(url string, headers map[string]string, urlbody []byte) (int, []byte) {
@@ -42,10 +43,44 @@ func MakePost(url string, headers map[string]string, urlbody []byte) (int, []byt
 	return resp.StatusCode, body
 }
 
-func MakePutFile(url string, headers map[string]string, data io.Reader) (int, []byte) {
+func MakePostForm(apiurl string, headers map[string]string, postform map[string]string) (int, []byte) {
+	data := url.Values{}
+	for kk, vv := range postform {
+		// data.Set(kk, vv)
+		data.Add(kk, vv)
+	}
+
+	req, _ := http.NewRequest("POST", apiurl, strings.NewReader(data.Encode())) // URL-encoded payload
+	for kk, vv := range headers {
+		req.Header.Set(kk, vv)
+	}
+	req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Add("Content-Length", strconv.Itoa(len(data.Encode())))
+
+	tr := &http.Transport{
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: false},
+	}
+	// fmt.Printf("Request : %v \n", req)
+	client := &http.Client{Transport: tr}
+	resp, err := client.Do(req)
+	if err != nil {
+		fmt.Println("error:", err)
+		return -1, nil
+		// panic(err)
+	}
+	defer resp.Body.Close()
+
+	// fmt.Println("response Status:", resp.Status)
+	// fmt.Println("response Headers:", resp.Header)
+	body, _ := ioutil.ReadAll(resp.Body)
+
+	return resp.StatusCode, body
+}
+
+func MakePutFile(apiurl string, headers map[string]string, data io.Reader) (int, []byte) {
 
 	cl, _ := strconv.ParseInt(headers["Content-Length"], 10, 64)
-	req, err := http.NewRequest(http.MethodPut, url, data)
+	req, err := http.NewRequest(http.MethodPut, apiurl, data)
 	req.ContentLength = cl
 	for kk, vv := range headers {
 		if kk != "Content-Length" {
@@ -140,6 +175,8 @@ func MakeSimpleGetToStr(urlpath string) (int, string) {
 func httpPostForm(urlpath string) {
 	resp, err := http.PostForm(urlpath,
 		url.Values{"key": {"Value"}, "id": {"123"}})
+	// resp, err := http.PostForm(urlpath,
+	// 	url.Values{"key": {"Value"}, "id": {"123"}})
 
 	if err != nil {
 		fmt.Println("error:", err)
