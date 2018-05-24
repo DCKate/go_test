@@ -1,0 +1,60 @@
+ref 1: https://stackoverflow.com/questions/6395076/using-reflect-how-do-you-set-the-value-of-a-struct-field
+Here's a step-by-step example which sets the value of a struct field while carefully avoiding errors.
+
+The Go reflect package has a CanAddr function.
+
+func (v Value) CanAddr() bool
+CanAddr returns true if the value's address can be obtained with Addr. Such values are called addressable. A value is addressable if it is an element of a slice, an element of an addressable array, a field of an addressable struct, or the result of dereferencing a pointer. If CanAddr returns false, calling Addr will panic.
+The Go reflect package has a CanSet function, which, if true, implies that CanAddr is also true.
+
+func (v Value) CanSet() bool
+CanSet returns true if the value of v can be changed. A Value can be changed only if it is addressable and was not obtained by the use of unexported struct fields. If CanSet returns false, calling Set or any type-specific setter (e.g., SetBool, SetInt64) will panic.
+We need to make sure we can Set the struct field. For example,
+
+ref2:
+
+type Config struct {
+    Name string
+    Meta struct {
+        Desc string
+        Properties map[string]string
+        Users []string
+    }
+}
+
+func initializeStruct(t reflect.Type, v reflect.Value) {
+  for i := 0; i < v.NumField(); i++ {
+    f := v.Field(i)
+    ft := t.Field(i)
+    switch ft.Type.Kind() {
+    case reflect.Map:
+      f.Set(reflect.MakeMap(ft.Type))
+    case reflect.Slice:
+      f.Set(reflect.MakeSlice(ft.Type, 0, 0))
+    case reflect.Chan:
+      f.Set(reflect.MakeChan(ft.Type, 0))
+    case reflect.Struct:
+      initializeStruct(ft.Type, f)
+    case reflect.Ptr:
+      fv := reflect.New(ft.Type.Elem())
+      initializeStruct(ft.Type.Elem(), fv.Elem())
+      f.Set(fv)
+    default:
+    }
+  }
+}
+
+ref 2: https://stackoverflow.com/questions/7850140/how-do-you-create-a-new-instance-of-a-struct-from-its-type-at-run-time-in-go
+As reflect.New doesn't automatically make reference types used in struct fields, 
+you could use something like the following to recursively initialize those field types 
+(note the recursive struct definition in this example):
+
+func main() {
+    t := reflect.TypeOf(Config{})
+    v := reflect.New(t)
+    initializeStruct(t, v.Elem())
+    c := v.Interface().(*Config)
+    c.Meta.Properties["color"] = "red" // map was already made!
+    c.Meta.Users = append(c.Meta.Users, "srid") // so was the slice.
+    fmt.Println(v.Interface())
+}
